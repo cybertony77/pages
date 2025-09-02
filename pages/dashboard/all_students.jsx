@@ -49,6 +49,19 @@ export default function AllStudents() {
     staleTime: 30 * 1000, // Consider data stale after 30 seconds
   });
 
+  // Load remembered filter values from sessionStorage
+  useEffect(() => {
+    const rememberedGrade = sessionStorage.getItem('allStudentsSelectedGrade');
+    const rememberedCenter = sessionStorage.getItem('allStudentsSelectedCenter');
+    
+    if (rememberedGrade) {
+      setSelectedGrade(rememberedGrade);
+    }
+    if (rememberedCenter) {
+      setSelectedCenter(rememberedCenter);
+    }
+  }, []);
+
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => setError(""), 5000);
@@ -134,6 +147,8 @@ export default function AllStudents() {
 
 
 
+
+
   if (isLoading) {
     return (
       <div style={{ 
@@ -168,7 +183,15 @@ export default function AllStudents() {
               <label className="filter-label">Filter by Grade</label>
               <GradeSelect
                 selectedGrade={selectedGrade}
-                onGradeChange={setSelectedGrade}
+                onGradeChange={(grade) => {
+                  setSelectedGrade(grade);
+                  // Remember the selected grade
+                  if (grade) {
+                    sessionStorage.setItem('allStudentsSelectedGrade', grade);
+                  } else {
+                    sessionStorage.removeItem('allStudentsSelectedGrade');
+                  }
+                }}
                 isOpen={openDropdown === 'grade'}
                 onToggle={() => setOpenDropdown(openDropdown === 'grade' ? null : 'grade')}
                 onClose={() => setOpenDropdown(null)}
@@ -178,13 +201,23 @@ export default function AllStudents() {
               <label className="filter-label">Filter by Center</label>
               <CenterSelect
                 selectedCenter={selectedCenter}
-                onCenterChange={setSelectedCenter}
+                onCenterChange={(center) => {
+                  setSelectedCenter(center);
+                  // Remember the selected center
+                  if (center) {
+                    sessionStorage.setItem('allStudentsSelectedCenter', center);
+                  } else {
+                    sessionStorage.removeItem('allStudentsSelectedCenter');
+                  }
+                }}
                 isOpen={openDropdown === 'center'}
                 onToggle={() => setOpenDropdown(openDropdown === 'center' ? null : 'center')}
                 onClose={() => setOpenDropdown(null)}
               />
             </div>
           </div>
+          
+
         </div>
         <div className="history-container">
           <div className="history-title">

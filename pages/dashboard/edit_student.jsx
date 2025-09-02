@@ -25,6 +25,8 @@ export default function EditStudent() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null); // 'grade', 'center', or null
+  const [searchResults, setSearchResults] = useState([]); // Store multiple search results
+  const [showSearchResults, setShowSearchResults] = useState(false); // Show/hide search results
 
   // React Query hooks
   const { data: allStudents } = useStudents();
@@ -108,6 +110,8 @@ export default function EditStudent() {
     setError("");
     setSuccess(false);
     setOriginalStudent(null);
+    setSearchResults([]);
+    setShowSearchResults(false);
     
     const searchTerm = studentId.trim();
     
@@ -118,14 +122,22 @@ export default function EditStudent() {
     } else {
       // It's a name, search through all students (case-insensitive, starts with)
       if (allStudents) {
-        const foundStudent = allStudents.find(student => 
+        const matchingStudents = allStudents.filter(student => 
           student.name.toLowerCase().startsWith(searchTerm.toLowerCase())
         );
         
-        if (foundStudent) {
+        if (matchingStudents.length === 1) {
+          // Single match, use it directly
+          const foundStudent = matchingStudents[0];
           setSearchId(foundStudent.id.toString());
+          setStudentId(foundStudent.id.toString());
+        } else if (matchingStudents.length > 1) {
+          // Multiple matches, show selection
+          setSearchResults(matchingStudents);
+          setShowSearchResults(true);
+          setError(`Found ${matchingStudents.length} students. Please select one:`);
         } else {
-          setError(`No student found with name containing "${searchTerm}"`);
+          setError(`No student found with name starting with "${searchTerm}"`);
           setSearchId("");
         }
       } else {
@@ -144,7 +156,18 @@ export default function EditStudent() {
       setOriginalStudent(null);
       setError("");
       setSuccess(false);
+      setSearchResults([]);
+      setShowSearchResults(false);
     }
+  };
+
+  // Handle student selection from search results
+  const handleStudentSelect = (selectedStudent) => {
+    setSearchId(selectedStudent.id.toString());
+    setStudentId(selectedStudent.id.toString());
+    setSearchResults([]);
+    setShowSearchResults(false);
+    setError("");
   };
 
   const handleChange = (e) => {
@@ -235,7 +258,7 @@ export default function EditStudent() {
     console.log('🚀 Final payload being sent:', updatedStudent);
     
     updateStudentMutation.mutate(
-      { id: studentId, updateData: updatedStudent },
+      { id: searchId, updateData: updatedStudent },
       {
         onSuccess: () => {
           setSuccess(true);
@@ -516,6 +539,7 @@ export default function EditStudent() {
       <Title>Edit Student</Title>
 
       <div className="form-container">
+        
         <form onSubmit={handleIdSubmit} className="fetch-form">
           <input
             className="fetch-input"
@@ -525,10 +549,62 @@ export default function EditStudent() {
             onChange={handleIdChange}
             required
           />
-                          <button type="submit" className="fetch-btn" disabled={studentLoading}>
-                  {studentLoading ? "Loading..." : "🔍 Search"}
-                </button>
+          <button type="submit" className="fetch-btn" disabled={studentLoading}>
+            {studentLoading ? "Loading..." : "🔍 Search"}
+          </button>
         </form>
+        
+        {/* Show search results if multiple matches found */}
+        {showSearchResults && searchResults.length > 0 && (
+          <div style={{ 
+            marginTop: "16px", 
+            padding: "16px", 
+            background: "#f8f9fa", 
+            borderRadius: "8px", 
+            border: "1px solid #dee2e6" 
+          }}>
+            <div style={{ 
+              marginBottom: "12px", 
+              fontWeight: "600", 
+              color: "#495057" 
+            }}>
+              Select a student:
+            </div>
+            {searchResults.map((student) => (
+              <button
+                key={student.id}
+                onClick={() => handleStudentSelect(student)}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: "12px 16px",
+                  margin: "8px 0",
+                  background: "white",
+                  border: "1px solid #dee2e6",
+                  borderRadius: "6px",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = "#e9ecef";
+                  e.target.style.borderColor = "#1FA8DC";
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = "white";
+                  e.target.style.borderColor = "#dee2e6";
+                }}
+              >
+                <div style={{ fontWeight: "600", color: "#1FA8DC" }}>
+                  {student.name} (ID: {student.id})
+                </div>
+                <div style={{ fontSize: "0.9rem", color: "#6c757d" }}>
+                  {student.grade} • {student.main_center}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       
       {student && (
@@ -546,7 +622,7 @@ export default function EditStudent() {
           
           <form onSubmit={handleEdit}>
             <div className="form-group">
-              <label>Full Name <span style={{color: 'red'}}>*</span></label>
+              <label>Full Name</label>
               <input
                 className="form-input"
                 name="name"
@@ -558,7 +634,7 @@ export default function EditStudent() {
               />
             </div>
             <div className="form-group">
-              <label>Age <span style={{color: 'red'}}>*</span></label>
+              <label>Age</label>
               <input
                 className="form-input"
                 name="age"
@@ -573,7 +649,7 @@ export default function EditStudent() {
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label>Grade <span style={{color: 'red'}}>*</span></label>
+                <label>Grade</label>
                 <GradeSelect 
                   selectedGrade={formData.grade || ''} 
                   onGradeChange={(grade) => handleChange({ target: { name: 'grade', value: grade } })} 
@@ -584,7 +660,7 @@ export default function EditStudent() {
                 />
               </div>
               <div className="form-group">
-                <label>School <span style={{color: 'red'}}>*</span></label>
+                <label>School</label>
                 <input
                   className="form-input"
                   name="school"
@@ -598,7 +674,7 @@ export default function EditStudent() {
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label>Student Phone <span style={{color: 'red'}}>*</span></label>
+                <label>Student Phone</label>
                 <input
                   className="form-input"
                   name="phone"
@@ -621,7 +697,7 @@ export default function EditStudent() {
                 </small>
               </div>
               <div className="form-group">
-                <label>Parent's Phone <span style={{color: 'red'}}>*</span></label>
+                <label>Parent's Phone</label>
                 <input
                   className="form-input"
                   name="parents_phone"
@@ -645,7 +721,7 @@ export default function EditStudent() {
               </div>
             </div>
             <div className="form-group" style={{ width: '100%' }}>
-              <label>Main Center <span style={{color: 'red'}}>*</span></label>
+              <label>Main Center</label>
               <CenterSelect 
                 selectedCenter={formData.main_center || ''} 
                 onCenterChange={(center) => handleChange({ target: { name: 'main_center', value: center } })} 

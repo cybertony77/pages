@@ -201,8 +201,8 @@ export default function AllAssistants() {
           {filteredAssistants.length === 0 ? (
             <div className="no-results">
               {searchTerm
-                ? "No assistants found with the search term."
-                : "No assistants found."
+                ? "❌ No assistants found with the search term."
+                : "❌ No assistants found."
               }
             </div>
           ) : (
