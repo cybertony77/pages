@@ -90,10 +90,11 @@ export default function DeleteAssistant() {
       // It's a numeric ID, search directly
       setSearchId(searchTerm);
     } else {
-      // It's a name, search through all assistants (case-insensitive, starts with)
+      // It's a name or username, search through all assistants (case-insensitive, starts with)
       if (allAssistants) {
         const matchingAssistants = allAssistants.filter(assistant => 
-          assistant.name && assistant.name.toLowerCase().startsWith(searchTerm.toLowerCase())
+          (assistant.name && assistant.name.toLowerCase().startsWith(searchTerm.toLowerCase())) ||
+          (assistant.id && assistant.id.toLowerCase().startsWith(searchTerm.toLowerCase()))
         );
         
         if (matchingAssistants.length === 1) {
@@ -105,9 +106,9 @@ export default function DeleteAssistant() {
           // Multiple matches, show selection
           setSearchResults(matchingAssistants);
           setShowSearchResults(true);
-          setError(`❌ Found ${matchingAssistants.length} assistants. Please select one:`);
+          setError(`❌ Found ${matchingAssistants.length} assistants. Please select one.`);
         } else {
-          setError(`❌ No assistant found with name starting with "${searchTerm}"`);
+          setError(`❌ No assistant found with name or username starting with "${searchTerm}"`);
           setSearchId("");
         }
       } else {
@@ -434,7 +435,7 @@ export default function DeleteAssistant() {
                       setShowSearchResults(false);
                     }
                   }}
-                  placeholder="Enter assistant ID or Name"
+                  placeholder="Enter assistant Username, Name"
                   disabled={assistantLoading || deleteAssistantMutation.isPending}
                   required
                 />

@@ -103,10 +103,11 @@ export default function EditAssistant() {
       // It's a numeric ID, search directly
       setSearchId(searchTerm);
     } else {
-      // It's a name, search through all assistants (case-insensitive, starts with)
+      // It's a name or username, search through all assistants (case-insensitive, starts with)
       if (allAssistants) {
         const matchingAssistants = allAssistants.filter(assistant => 
-          assistant.name && assistant.name.toLowerCase().startsWith(searchTerm.toLowerCase())
+          (assistant.name && assistant.name.toLowerCase().startsWith(searchTerm.toLowerCase())) ||
+          (assistant.id && assistant.id.toLowerCase().startsWith(searchTerm.toLowerCase()))
         );
         
         if (matchingAssistants.length === 1) {
@@ -118,9 +119,9 @@ export default function EditAssistant() {
           // Multiple matches, show selection
           setSearchResults(matchingAssistants);
           setShowSearchResults(true);
-          setError(`❌ Found ${matchingAssistants.length} assistants. Please select one:`);
+          setError(`❌ Found ${matchingAssistants.length} assistants. Please select one.`);
         } else {
-          setError(`❌ No assistant found with name starting with "${searchTerm}"`);
+          setError(`❌ No assistant found with name or username starting with "${searchTerm}"`);
           setSearchId("");
         }
       } else {
@@ -471,10 +472,9 @@ export default function EditAssistant() {
               <input
                 className="fetch-input"
                 name="id"
-                placeholder="Enter assistant ID or Name"
+                placeholder="Enter assistant Username, Name"
                 value={id}
                 onChange={handleIdChange}
-                required
               />
               <button type="submit" disabled={assistantLoading} className="fetch-btn">
                 {assistantLoading ? "Loading..." : "🔍 Search"}
@@ -556,7 +556,6 @@ export default function EditAssistant() {
                   placeholder="Edit assistant username"
                   value={form.id}
                   onChange={handleChange}
-                  required
                 />
               </div>
               <div className="form-group">
@@ -567,7 +566,6 @@ export default function EditAssistant() {
                   placeholder="Edit assistant's name"
                   value={form.name}
                   onChange={handleChange}
-                  required
                 />
               </div>
               <div className="form-group">
@@ -586,7 +584,7 @@ export default function EditAssistant() {
                     const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 11);
                     handleChange({ target: { name: 'phone', value } });
                   }}
-                  required
+
                 />
                 <small style={{ color: '#6c757d', fontSize: '0.85rem', marginTop: '4px', display: 'block' }}>
                   Must be exactly 11 digits (e.g., 12345678901)
@@ -635,7 +633,6 @@ export default function EditAssistant() {
                 <RoleSelect 
                   selectedRole={form.role}
                   onRoleChange={(role) => setForm({ ...form, role })}
-                  required={true}
                 />
               </div>
               <button type="submit" disabled={updateAssistantMutation.isPending || !hasChanges()} className="submit-btn">

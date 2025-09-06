@@ -135,7 +135,7 @@ export default function EditStudent() {
           // Multiple matches, show selection
           setSearchResults(matchingStudents);
           setShowSearchResults(true);
-          setError(`Found ${matchingStudents.length} students. Please select one:`);
+          setError(`Found ${matchingStudents.length} students. Please select one.`);
         } else {
           setError(`No student found with name starting with "${searchTerm}"`);
           setSearchId("");
@@ -547,7 +547,6 @@ export default function EditStudent() {
             placeholder="Enter student ID or Name"
             value={studentId}
             onChange={handleIdChange}
-            required
           />
           <button type="submit" className="fetch-btn" disabled={studentLoading}>
             {studentLoading ? "Loading..." : "🔍 Search"}
@@ -629,7 +628,6 @@ export default function EditStudent() {
                 placeholder="Enter student's full name"
                 value={formData.name || ''}
                 onChange={handleChange}
-                required
                 autocomplete="off"
               />
             </div>
@@ -644,7 +642,6 @@ export default function EditStudent() {
                 placeholder="Enter student's age"
                 value={formData.age || ''}
                 onChange={handleChange}
-                required
               />
             </div>
             <div className="form-row">
@@ -653,7 +650,6 @@ export default function EditStudent() {
                 <GradeSelect 
                   selectedGrade={formData.grade || ''} 
                   onGradeChange={(grade) => handleChange({ target: { name: 'grade', value: grade } })} 
-                  required 
                   isOpen={openDropdown === 'grade'}
                   onToggle={() => setOpenDropdown(openDropdown === 'grade' ? null : 'grade')}
                   onClose={() => setOpenDropdown(null)}
@@ -667,7 +663,6 @@ export default function EditStudent() {
                   placeholder="Enter student's school"
                   value={formData.school || ''}
                   onChange={handleChange}
-                  required
                   autocomplete="off"
                 />
               </div>
@@ -689,7 +684,6 @@ export default function EditStudent() {
                     const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 11);
                     handleChange({ target: { name: 'phone', value } });
                   }}
-                  required
                   autocomplete="off"
                 />
                 <small style={{ color: '#6c757d', fontSize: '0.85rem', marginTop: '4px', display: 'block' }}>
@@ -712,7 +706,7 @@ export default function EditStudent() {
                     const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 11);
                     handleChange({ target: { name: 'parents_phone', value } });
                   }}
-                  required
+
                   autocomplete="off"
                 />
                 <small style={{ color: '#6c757d', fontSize: '0.85rem', marginTop: '4px', display: 'block' }}>
@@ -725,7 +719,6 @@ export default function EditStudent() {
               <CenterSelect 
                 selectedCenter={formData.main_center || ''} 
                 onCenterChange={(center) => handleChange({ target: { name: 'main_center', value: center } })} 
-                required 
                 style={{ width: '100%' }}
                 isOpen={openDropdown === 'center'}
                 onToggle={() => setOpenDropdown(openDropdown === 'center' ? null : 'center')}

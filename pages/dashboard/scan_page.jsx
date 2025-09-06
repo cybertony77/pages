@@ -39,6 +39,9 @@ export default function QR() {
   const [optimisticHwDone, setOptimisticHwDone] = useState(null);
   const [optimisticPaidSession, setOptimisticPaidSession] = useState(null);
   const [optimisticAttended, setOptimisticAttended] = useState(null);
+  const [isQRScanned, setIsQRScanned] = useState(false); // Track if student was found via QR scan
+  const [searchResults, setSearchResults] = useState([]); // Store multiple search results
+  const [showSearchResults, setShowSearchResults] = useState(false); // Show/hide search results
   const router = useRouter();
 
   // React Query hooks with enhanced real-time updates
@@ -66,11 +69,15 @@ export default function QR() {
     const rememberedCenter = sessionStorage.getItem('lastAttendanceCenter');
     const rememberedWeek = sessionStorage.getItem('lastSelectedWeek');
     
+    console.log('Loading from session storage:', { rememberedCenter, rememberedWeek });
+    
     if (rememberedCenter) {
       setAttendanceCenter(rememberedCenter);
+      console.log('Center loaded from session storage:', rememberedCenter);
     }
     if (rememberedWeek) {
       setSelectedWeek(rememberedWeek);
+      console.log('Week loaded from session storage:', rememberedWeek);
     }
   }, []);
 
@@ -149,6 +156,11 @@ export default function QR() {
     
     const searchTerm = studentId.trim();
     
+    // Mark that this is a manual search, not QR scan
+    setIsQRScanned(false);
+    setSearchResults([]);
+    setShowSearchResults(false);
+    
     // Check if it's a numeric ID
     if (/^\d+$/.test(searchTerm)) {
       // It's a numeric ID, search directly
@@ -156,14 +168,22 @@ export default function QR() {
     } else {
       // It's a name, search through all students (case-insensitive, starts with)
       if (allStudents) {
-        const foundStudent = allStudents.find(student => 
+        const matchingStudents = allStudents.filter(student => 
           student.name.toLowerCase().startsWith(searchTerm.toLowerCase())
         );
         
-        if (foundStudent) {
+        if (matchingStudents.length === 1) {
+          // Single match, use it directly
+          const foundStudent = matchingStudents[0];
           setSearchId(foundStudent.id.toString());
+          setStudentId(foundStudent.id.toString());
+        } else if (matchingStudents.length > 1) {
+          // Multiple matches, show selection
+          setSearchResults(matchingStudents);
+          setShowSearchResults(true);
+          setError(`Found ${matchingStudents.length} students. Please select one.`);
         } else {
-          setError(`No student found with name containing "${searchTerm}"`);
+          setError(`No student found with name starting with "${searchTerm}"`);
           setSearchId("");
         }
       } else {
@@ -172,7 +192,15 @@ export default function QR() {
     }
   };
 
-
+  // Handle student selection from search results
+  const handleStudentSelect = (selectedStudent) => {
+    setSearchId(selectedStudent.id.toString());
+    setStudentId(selectedStudent.id.toString());
+    setSearchResults([]);
+    setShowSearchResults(false);
+    setError("");
+    setIsQRScanned(false); // Mark as manual search
+  };
 
   useEffect(() => {
     const token = sessionStorage.getItem("token");
@@ -183,12 +211,57 @@ export default function QR() {
     
   }, [studentId, student]);
 
+  // Auto-attend student function
+  const autoAttendStudent = async (studentId) => {
+    try {
+      console.log('🤖 Auto-attending student:', student.name, 'for week:', selectedWeek, 'center:', attendanceCenter);
+      
+      // Set optimistic state immediately
+      setOptimisticAttended(true);
+      
+      const weekNumber = getWeekNumber(selectedWeek);
+      
+      // Create attendance data
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const lastAttendance = `${day}/${month}/${year} in ${attendanceCenter}`;
+      
+      const attendanceData = { 
+        attended: true,
+        lastAttendance, 
+        lastAttendanceCenter: attendanceCenter, 
+        attendanceWeek: weekNumber 
+      };
+      
+      // Call the attendance API
+      toggleAttendanceMutation.mutate({
+        id: student.id,
+        attendanceData
+      });
+      
+    } catch (error) {
+      console.error('Error in auto-attend:', error);
+      // Reset optimistic state on error
+      setOptimisticAttended(null);
+    }
+  };
+
   // Handle QR code scanned from the QRScanner component
   const handleQRCodeScanned = (scannedStudentId) => {
     setError("");
     setAttendSuccess(false);
     setStudentId(scannedStudentId);
     setSearchId(scannedStudentId);
+    
+    // Only mark as QR scanned if center and week are already selected
+    // This prevents auto-attendance if student is scanned before selecting center/week
+    if (attendanceCenter && selectedWeek) {
+      setIsQRScanned(true); // Mark that this student was found via QR scan with conditions met
+    } else {
+      setIsQRScanned(false); // Don't auto-attend if conditions not met at scan time
+    }
   };
 
   // Handle QR scanner errors
@@ -236,6 +309,24 @@ export default function QR() {
     setOptimisticAttended(null);
   }, [student?.id, selectedWeek]);
 
+  // Auto-attend student when conditions are met (ONLY for QR scans with pre-selected center/week)
+  useEffect(() => {
+    // Only auto-attend if:
+    // 1. Student data is loaded
+    // 2. Center and week are selected
+    // 3. Student is not already attended
+    // 4. We haven't already set optimistic attendance
+    // 5. Student was found via QR scan AND center/week were already selected at scan time
+    if (student && attendanceCenter && selectedWeek && !student.attended_the_session && optimisticAttended === null && isQRScanned) {
+      // Add a small delay to ensure UI is ready
+      const timer = setTimeout(() => {
+        autoAttendStudent(student.id);
+      }, 800); // 800ms delay for better UX
+      
+      return () => clearTimeout(timer);
+    }
+  }, [student, attendanceCenter, selectedWeek, optimisticAttended, isQRScanned]);
+
   // Reset HW/Paid optimistic states when attendance becomes false
   useEffect(() => {
     const currentAttended = optimisticAttended !== null ? optimisticAttended : student?.attended_the_session;
@@ -252,18 +343,6 @@ export default function QR() {
 
 
 
-  const updateAttendanceWeek = async (week) => {
-    if (!student) return;
-    
-    try {
-      // Remember the selected week
-      if (week) {
-        sessionStorage.setItem('lastSelectedWeek', week);
-      }
-    } catch (err) {
-      console.error("Failed to update attendance week:", err);
-    }
-  };
 
   const toggleAttendance = async () => {
     if (!student || !selectedWeek || !attendanceCenter) return;
@@ -722,6 +801,9 @@ export default function QR() {
           onChange={(e) => {
             setStudentId(e.target.value);
             setSearchId(""); // Clear search ID to prevent auto-fetch
+            setIsQRScanned(false); // Reset QR scan flag when input changes
+            setSearchResults([]);
+            setShowSearchResults(false);
             // Clear error and success when input changes
             if (e.target.value !== studentId) {
               setError("");
@@ -733,6 +815,127 @@ export default function QR() {
             🔍 Search
           </button>
         </form>
+        
+        {/* Show search results if multiple matches found */}
+        {showSearchResults && searchResults.length > 0 && (
+          <div style={{ 
+            marginTop: "16px", 
+            padding: "16px", 
+            background: "#f8f9fa", 
+            borderRadius: "8px", 
+            border: "1px solid #dee2e6" 
+          }}>
+            <div style={{ 
+              marginBottom: "12px", 
+              fontWeight: "600", 
+              color: "#495057" 
+            }}>
+              Select a student:
+            </div>
+            {searchResults.map((student) => (
+              <button
+                key={student.id}
+                onClick={() => handleStudentSelect(student)}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: "12px 16px",
+                  margin: "8px 0",
+                  background: "white",
+                  border: "1px solid #dee2e6",
+                  borderRadius: "6px",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = "#e9ecef";
+                  e.target.style.borderColor = "#1FA8DC";
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = "white";
+                  e.target.style.borderColor = "#dee2e6";
+                }}
+              >
+                <div style={{ fontWeight: "600", color: "#1FA8DC" }}>
+                  {student.name} (ID: {student.id})
+                </div>
+                <div style={{ fontSize: "0.9rem", color: "#6c757d" }}>
+                  {student.grade} • {student.main_center}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Week and Center Selection - Always visible */}
+      <div style={{ 
+        background: 'white', 
+        borderRadius: 16, 
+        padding: 24, 
+        boxShadow: '0 8px 32px rgba(0,0,0,0.1)', 
+        marginBottom: 24 
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Attendance Center */}
+          <div>
+            <div style={{ 
+              fontWeight: 600, 
+              color: '#6c757d', 
+              fontSize: '0.9rem', 
+              marginBottom: 8,
+              textTransform: 'uppercase',
+              letterSpacing: '1px'
+            }}>
+              Attendance Center
+            </div>
+            <CenterSelect
+              selectedCenter={attendanceCenter}
+              onCenterChange={(center) => {
+                setAttendanceCenter(center);
+                // Remember the selected center
+                if (center) {
+                  sessionStorage.setItem('lastAttendanceCenter', center);
+                } else {
+                  // Clear selection - remove from sessionStorage
+                  sessionStorage.removeItem('lastAttendanceCenter');
+                }
+              }}
+            />
+          </div>
+          
+          {/* Attendance Week */}
+          <div>
+            <div style={{ 
+              fontWeight: 600, 
+              color: '#6c757d', 
+              fontSize: '0.9rem', 
+              marginBottom: 8,
+              textTransform: 'uppercase',
+              letterSpacing: '1px'
+            }}>
+              Attendance Week
+            </div>
+            <AttendanceWeekSelect
+              selectedWeek={selectedWeek}
+              onWeekChange={(week) => {
+                console.log('Week selected:', week);
+                setSelectedWeek(week);
+                // Save to session storage
+                if (week) {
+                  sessionStorage.setItem('lastSelectedWeek', week);
+                  console.log('Week saved to session storage:', week);
+                } else {
+                  // Clear selection - remove from sessionStorage
+                  sessionStorage.removeItem('lastSelectedWeek');
+                  console.log('Week removed from session storage');
+                }
+              }}
+              required={true}
+            />
+          </div>
+        </div>
       </div>
 
       <QRScanner 
@@ -766,22 +969,54 @@ export default function QR() {
           </div>
 
           <div className="status-row">
-            <span className={`status-badge ${(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) ? 'status-attended' : 'status-not-attended'}`}>
-              {(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) ? '✅ Attended' : '❌ Not Attended'}
+            <span className={`status-badge ${(!attendanceCenter || !selectedWeek) 
+              ? 'status-not-attended' 
+              : (optimisticAttended !== null ? optimisticAttended : student.attended_the_session) 
+                ? 'status-attended' 
+                : 'status-not-attended'}`}>
+              {(!attendanceCenter || !selectedWeek) 
+                ? '❌ Not Attended' 
+                : (optimisticAttended !== null ? optimisticAttended : student.attended_the_session) 
+                  ? '✅ Attended' 
+                  : '❌ Not Attended'}
             </span>
-            <span className={`status-badge ${(optimisticHwDone !== null ? optimisticHwDone : student.hwDone) ? 'status-attended' : 'status-not-attended'}`}>
-              {(optimisticHwDone !== null ? optimisticHwDone : student.hwDone) ? '✅ H.W: Done' : '❌ H.W: Not Done'}
+            <span className={`status-badge ${(!attendanceCenter || !selectedWeek) 
+              ? 'status-not-attended' 
+              : (optimisticHwDone !== null ? optimisticHwDone : student.hwDone) 
+                ? 'status-attended' 
+                : 'status-not-attended'}`}>
+              {(!attendanceCenter || !selectedWeek) 
+                ? '❌ H.W: Not Done' 
+                : (optimisticHwDone !== null ? optimisticHwDone : student.hwDone) 
+                  ? '✅ H.W: Done' 
+                  : '❌ H.W: Not Done'}
             </span>
-            <span className={`status-badge ${(optimisticPaidSession !== null ? optimisticPaidSession : student.paidSession) ? 'status-attended' : 'status-not-attended'}`}>
-              {(optimisticPaidSession !== null ? optimisticPaidSession : student.paidSession) ? '✅ Paid' : '❌ Not Paid'}
+            <span className={`status-badge ${(!attendanceCenter || !selectedWeek) 
+              ? 'status-not-attended' 
+              : (optimisticPaidSession !== null ? optimisticPaidSession : student.paidSession) 
+                ? 'status-attended' 
+                : 'status-not-attended'}`}>
+              {(!attendanceCenter || !selectedWeek) 
+                ? '❌ Not Paid' 
+                : (optimisticPaidSession !== null ? optimisticPaidSession : student.paidSession) 
+                  ? '✅ Paid' 
+                  : '❌ Not Paid'}
             </span>
-            <span className={`status-badge ${student.quizDegree ? 'status-attended' : 'status-not-attended'}`}>
-              {student.quizDegree ? `✅ Quiz: ${student.quizDegree}` : '❌ Quiz: ...'}
+            <span className={`status-badge ${(!attendanceCenter || !selectedWeek) 
+              ? 'status-not-attended' 
+              : student.quizDegree 
+                ? 'status-attended' 
+                : 'status-not-attended'}`}>
+              {(!attendanceCenter || !selectedWeek) 
+                ? '❌ Quiz: ...' 
+                : student.quizDegree 
+                  ? `✅ Quiz: ${student.quizDegree}` 
+                  : '❌ Quiz: ...'}
             </span>
           </div>
 
-          {/* Show current attendance info if student is attended */}
-          {(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) && student.lastAttendance && (
+          {/* Show current attendance info if student is attended AND center/week are selected */}
+          {(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) && student.lastAttendance && attendanceCenter && selectedWeek && (
             <div className="info-item">
               <div className="info-label">Attendance info:</div>
               <div className="info-value" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
@@ -790,42 +1025,6 @@ export default function QR() {
             </div>
           )}
           
-          {/* Attendance Center - always show for all students */}
-          <div className="info-item select-item" style={{ marginBottom: 16 }}>
-            <div className="info-label">Attendance Center</div>
-            <CenterSelect
-              selectedCenter={attendanceCenter}
-              onCenterChange={(center) => {
-                setAttendanceCenter(center);
-                // Remember the selected center
-                if (center) {
-                  sessionStorage.setItem('lastAttendanceCenter', center);
-                } else {
-                  // Clear selection - remove from sessionStorage
-                  sessionStorage.removeItem('lastAttendanceCenter');
-                }
-              }}
-            />
-          </div>
-          
-          {/* Attendance Week - always show for both attended and non-attended students */}
-          <div className="info-item select-item" style={{ marginBottom: 16 }}>
-            <div className="info-label">Attendance Week</div>
-            <AttendanceWeekSelect
-              selectedWeek={selectedWeek}
-              onWeekChange={(week) => {
-                console.log('Week selected:', week);
-                setSelectedWeek(week);
-                if (week) {
-                  updateAttendanceWeek(week);
-                } else {
-                  // Clear selection - remove from sessionStorage
-                  sessionStorage.removeItem('lastSelectedWeek');
-                }
-              }}
-              required={true}
-            />
-          </div>
 
           {/* Warning message when week/center not selected */}
           {(!selectedWeek || !attendanceCenter) && (
@@ -840,7 +1039,7 @@ export default function QR() {
               boxShadow: '0 2px 8px rgba(255, 193, 7, 0.3)',
               fontSize: '0.9rem'
             }}>
-              ⚠️ Please select both a week and attendance center to enable tracking
+              ⚠️ Please select both a attendance week and attendance center to enable tracking attendance
             </div>
           )}
 
@@ -854,7 +1053,11 @@ export default function QR() {
               disabled={!attendanceCenter || !selectedWeek}
               style={{
                 width: '100%',
-                background: (optimisticAttended !== null ? optimisticAttended : student.attended_the_session) ? 'linear-gradient(135deg, #dc3545 0%, #e74c3c 100%)' : 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                background: (!attendanceCenter || !selectedWeek) 
+                  ? 'linear-gradient(135deg, #28a745 0%, #20c997 100%)' // Default "Not Attended" state
+                  : (optimisticAttended !== null ? optimisticAttended : student.attended_the_session) 
+                    ? 'linear-gradient(135deg, #dc3545 0%, #e74c3c 100%)' 
+                    : 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
                 color: 'white',
                 border: 'none',
                 borderRadius: 10,
@@ -866,7 +1069,11 @@ export default function QR() {
                 transition: 'all 0.3s ease'
               }}
             >
-              {(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) ? '❌ Mark as Not Attended' : '✅ Mark as Attended'}
+              {(!attendanceCenter || !selectedWeek) 
+                ? '✅ Mark as Attended' 
+                : (optimisticAttended !== null ? optimisticAttended : student.attended_the_session) 
+                  ? '❌ Mark as Not Attended' 
+                  : '✅ Mark as Attended'}
             </button>
 
             {/* Homework Toggle Button */}
@@ -876,11 +1083,13 @@ export default function QR() {
               disabled={!attendanceCenter || !selectedWeek || !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session)}
               style={{
                 width: '100%',
-                background: !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) 
-                  ? 'linear-gradient(135deg, rgb(46, 165, 101) 0%, rgb(41, 196, 88) 100%)' // Gray when not attended
-                  : (optimisticHwDone !== null ? optimisticHwDone : student.hwDone) 
-                    ? 'linear-gradient(135deg, #dc3545 0%, #e74c3c 100%)' 
-                    : 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                background: (!attendanceCenter || !selectedWeek) 
+                  ? 'linear-gradient(135deg, #28a745 0%, #20c997 100%)' // Default "Not Done" state
+                  : !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) 
+                      ? 'linear-gradient(135deg, #6c757d 0%, #495057 100%)' // Gray when not attended
+                    : (optimisticHwDone !== null ? optimisticHwDone : student.hwDone) 
+                      ? 'linear-gradient(135deg, #dc3545 0%, #e74c3c 100%)' 
+                      : 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
                 color: 'white',
                 border: 'none',
                 borderRadius: 10,
@@ -892,11 +1101,13 @@ export default function QR() {
                 transition: 'all 0.3s ease'
               }}
             >
-              {!(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) 
-                ? '🚫 Must Attend First' 
-                : (optimisticHwDone !== null ? optimisticHwDone : student.hwDone) 
-                  ? '❌ Mark as H.W Not Done' 
-                  : '✅ Mark as H.W Done'}
+              {(!attendanceCenter || !selectedWeek) 
+                ? '✅ Mark as H.W Done' 
+                : !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) 
+                  ? '🚫 Must Attend First' 
+                  : (optimisticHwDone !== null ? optimisticHwDone : student.hwDone) 
+                    ? '❌ Mark as H.W Not Done' 
+                    : '✅ Mark as H.W Done'}
             </button>
 
             {/* Payment Toggle Button */}
@@ -906,11 +1117,13 @@ export default function QR() {
               disabled={!attendanceCenter || !selectedWeek || !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session)}
               style={{
                 width: '100%',
-                background: !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) 
-                  ? 'linear-gradient(135deg, rgb(46, 165, 101) 0%, rgb(41, 196, 88) 100%)' // Gray when not attended
-                  : (optimisticPaidSession !== null ? optimisticPaidSession : student.paidSession) 
-                    ? 'linear-gradient(135deg, #dc3545 0%, #e74c3c 100%)' 
-                    : 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                background: (!attendanceCenter || !selectedWeek) 
+                  ? 'linear-gradient(135deg, #28a745 0%, #20c997 100%)' // Default "Not Paid" state
+                  : !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) 
+                    ? 'linear-gradient(135deg, #6c757d 0%, #495057 100%)' // Gray when not attended
+                    : (optimisticPaidSession !== null ? optimisticPaidSession : student.paidSession) 
+                      ? 'linear-gradient(135deg, #dc3545 0%, #e74c3c 100%)' 
+                      : 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
                 color: 'white',
                 border: 'none',
                 borderRadius: 10,
@@ -922,11 +1135,13 @@ export default function QR() {
                 transition: 'all 0.3s ease'
               }}
             >
-              {!(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) 
-                ? '🚫 Must Attend First' 
-                : (optimisticPaidSession !== null ? optimisticPaidSession : student.paidSession) 
-                  ? '❌ Mark as Not Paid' 
-                  : '✅ Mark as Paid'}
+              {(!attendanceCenter || !selectedWeek) 
+                ? '✅ Mark as Paid' 
+                : !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) 
+                  ? '🚫 Must Attend First' 
+                  : (optimisticPaidSession !== null ? optimisticPaidSession : student.paidSession) 
+                    ? '❌ Mark as Not Paid' 
+                    : '✅ Mark as Paid'}
             </button>
 
           </div>

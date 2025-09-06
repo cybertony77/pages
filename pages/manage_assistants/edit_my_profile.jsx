@@ -261,7 +261,6 @@ export default function EditMyProfile() {
                 name="name"
                 value={form.name}
                 onChange={handleChange}
-                required
               />
             </div>
             <div className="form-group">
@@ -271,7 +270,6 @@ export default function EditMyProfile() {
                 name="id"
                 value={form.id}
                 onChange={handleChange}
-                required
               />
             </div>
             <div className="form-group">
@@ -290,7 +288,6 @@ export default function EditMyProfile() {
                   const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 11);
                   handleChange({ target: { name: 'phone', value } });
                 }}
-                required
               />
               <small style={{ color: '#6c757d', fontSize: '0.85rem', marginTop: '4px', display: 'block' }}>
                 Must be exactly 11 digits (e.g., 01234567890)

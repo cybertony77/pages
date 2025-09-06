@@ -13,6 +13,8 @@ export default function StudentInfo() {
   const [searchId, setSearchId] = useState(""); // Separate state for search
   const [error, setError] = useState("");
   const [studentDeleted, setStudentDeleted] = useState(false);
+  const [searchResults, setSearchResults] = useState([]); // Store multiple search results
+  const [showSearchResults, setShowSearchResults] = useState(false); // Show/hide search results
   const router = useRouter();
 
   // Get all students for name-based search
@@ -102,6 +104,8 @@ export default function StudentInfo() {
     
     setError("");
     setStudentDeleted(false); // Reset deletion state for new search
+    setSearchResults([]);
+    setShowSearchResults(false);
     
     const searchTerm = studentId.trim();
     
@@ -112,14 +116,22 @@ export default function StudentInfo() {
     } else {
       // It's a name, search through all students (case-insensitive, starts with)
       if (allStudents) {
-        const foundStudent = allStudents.find(student => 
+        const matchingStudents = allStudents.filter(student => 
           student.name.toLowerCase().startsWith(searchTerm.toLowerCase())
         );
         
-        if (foundStudent) {
+        if (matchingStudents.length === 1) {
+          // Single match, use it directly
+          const foundStudent = matchingStudents[0];
           setSearchId(foundStudent.id.toString());
+          setStudentId(foundStudent.id.toString());
+        } else if (matchingStudents.length > 1) {
+          // Multiple matches, show selection
+          setSearchResults(matchingStudents);
+          setShowSearchResults(true);
+          setError(`Found ${matchingStudents.length} students. Please select one.`);
         } else {
-          setError(`No student found with name containing "${searchTerm}"`);
+          setError(`No student found with name starting with "${searchTerm}"`);
           setSearchId("");
         }
       } else {
@@ -136,7 +148,18 @@ export default function StudentInfo() {
     if (!value.trim()) {
       setError("");
       setStudentDeleted(false); // Reset deletion state when clearing input
+      setSearchResults([]);
+      setShowSearchResults(false);
     }
+  };
+
+  // Handle student selection from search results
+  const handleStudentSelect = (selectedStudent) => {
+    setSearchId(selectedStudent.id.toString());
+    setStudentId(selectedStudent.id.toString());
+    setSearchResults([]);
+    setShowSearchResults(false);
+    setError("");
   };
 
   // Helper function to get attendance status for a week
@@ -341,6 +364,58 @@ export default function StudentInfo() {
               {studentLoading ? "Loading..." : "🔍 Search"}
         </button>
           </form>
+          
+          {/* Show search results if multiple matches found */}
+          {showSearchResults && searchResults.length > 0 && (
+            <div style={{ 
+              marginTop: "16px", 
+              padding: "16px", 
+              background: "#f8f9fa", 
+              borderRadius: "8px", 
+              border: "1px solid #dee2e6" 
+            }}>
+              <div style={{ 
+                marginBottom: "12px", 
+                fontWeight: "600", 
+                color: "#495057" 
+              }}>
+                Select a student:
+              </div>
+              {searchResults.map((student) => (
+                <button
+                  key={student.id}
+                  onClick={() => handleStudentSelect(student)}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "12px 16px",
+                    margin: "8px 0",
+                    background: "white",
+                    border: "1px solid #dee2e6",
+                    borderRadius: "6px",
+                    textAlign: "left",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease"
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = "#e9ecef";
+                    e.target.style.borderColor = "#1FA8DC";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = "white";
+                    e.target.style.borderColor = "#dee2e6";
+                  }}
+                >
+                  <div style={{ fontWeight: "600", color: "#1FA8DC" }}>
+                    {student.name} (ID: {student.id})
+                  </div>
+                  <div style={{ fontSize: "0.9rem", color: "#6c757d" }}>
+                    {student.grade} • {student.main_center}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         
         {student && !studentDeleted && (

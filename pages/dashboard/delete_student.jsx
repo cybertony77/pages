@@ -76,7 +76,7 @@ export default function DeleteStudent() {
           // Multiple matches, show selection
           setSearchResults(matchingStudents);
           setShowSearchResults(true);
-          setError(`Found ${matchingStudents.length} students. Please select one:`);
+          setError(`Found ${matchingStudents.length} students. Please select one.`);
         } else {
           setError(`No student found with name starting with "${searchTerm}"`);
           setSearchId("");
